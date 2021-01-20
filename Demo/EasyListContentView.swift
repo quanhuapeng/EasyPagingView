@@ -21,12 +21,20 @@ class EasyListContentView: UIView {
         flowLayout.itemSize = CGSize(width: frame.width, height: 100)
         collectionView = UICollectionView(frame: CGRect(origin: .zero, size: frame.size), collectionViewLayout: flowLayout)
         collectionView.dataSource = self
-        collectionView.isScrollEnabled = false
+//        collectionView.isScrollEnabled = false
         collectionView.backgroundColor = .white
         collectionView.register(CollectionViewCell.self, forCellWithReuseIdentifier: "cell")
         collectionView.contentInset.bottom = 0
         
         addSubview(collectionView)
+        
+        collectionView.mj_header = MJRefreshNormalHeader(refreshingBlock: { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(300)) {
+                self?.totalCount = 20
+                self?.collectionView.reloadData()
+                self?.collectionView.mj_header?.endRefreshing()
+            }
+        })
         
         let footer = MJRefreshBackNormalFooter(refreshingBlock: { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(300)) {

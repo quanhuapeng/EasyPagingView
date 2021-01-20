@@ -147,6 +147,14 @@ open class EasyPagingView: UIScrollView {
         if let pinView = pagePinView {
             contentView.bringSubviewToFront(pinView)
         }
+        
+        if !hadHeaderView {
+            self.isScrollEnabled = false
+        }
+    }
+    
+    private var hadHeaderView: Bool {
+        return (pageHeaderView != nil) && (pagePinView != nil)
     }
 
     // MARK: - Adding and removing subviews
@@ -217,7 +225,6 @@ open class EasyPagingView: UIScrollView {
             if !isPinViewOnTop {
                 currentPageListViewOffsetY = pageCurrentOffsetDict[currentIndex] ?? 0
                 currentPageListViewOffsetY += switchToNewPageAndScrollDownOffsetY
-
                 let contentOffsetY = contentOffsetDict[currentIndex] ?? 0
                 contentOffsetDict[currentIndex] = contentOffsetY + switchToNewPageAndScrollDownOffsetY
                 if currentPageListViewOffsetY <= 0 {
@@ -339,11 +346,11 @@ open class EasyPagingView: UIScrollView {
 
     // TODO: 切换 page 的 scrollView contentOffset.y
     func horizontalScrollDidEnd(at index: Int) {
-
+        guard hadHeaderView else { return }
+        
         if isPinViewPaning {
             pageCurrentOffsetDict[currentIndex] = pageDict[currentIndex]!.pageListView.contentOffset.y
             pageDict[index]?.pageListView.isScrollEnabled = true
-            pageDict[index]?.pageListView.addGestureRecognizer(pagePanGesture!)
         } else {
             let currentContentOffsetY = contentOffsetDict[index] ?? 0
             if self.contentOffset.y > self.pageCollectionViewOriginY {
@@ -361,7 +368,11 @@ open class EasyPagingView: UIScrollView {
                 }
             }
         }
-
+        if index != currentIndex, let gesture = pagePanGesture {
+            pageDict[currentIndex]?.pageListView.removeGestureRecognizer(gesture)
+            pageDict[index]?.pageListView.addGestureRecognizer(gesture)
+        }
+        
         currentIndex = index
     }
     
@@ -411,8 +422,10 @@ open class EasyPagingView: UIScrollView {
         } else if context == ContentViewKVOContext {
             if keyPath == kContentOffset {
                 if let scrollView = object as? UIScrollView {
-                    if scrollView.contentOffset.y < lastOffsetY {
-                        isScrollingDown = true
+                    if scrollView.contentOffset.y <= lastOffsetY {
+                        if scrollView.contentOffset.y != lastOffsetY {
+                            isScrollingDown = true
+                        }
                     } else {
                         isScrollingDown = false
                     }
@@ -435,6 +448,9 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
     public func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return dataSource?.numberOfLists(in: self) ?? 0
     }
+    
+    public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+    }
 
     public func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: cellIdentifier, for: indexPath)
@@ -445,10 +461,15 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
             page?.pageView.setNeedsLayout()
             page?.pageView.layoutIfNeeded()
 
-            page?.pageListView.addObserver(self, forKeyPath: kContentSize, options: .old, context: PageListViewKVOContext)
-            page?.pageListView.addObserver(self, forKeyPath: kContentOffset, options: .old, context: PageListViewKVOContext)
+            if hadHeaderView {
+                page?.pageListView.isScrollEnabled = false
+                page?.pageListView.addObserver(self, forKeyPath: kContentSize, options: .old, context: PageListViewKVOContext)
+                page?.pageListView.addObserver(self, forKeyPath: kContentOffset, options: .old, context: PageListViewKVOContext)
 
-            page?.pageListView.addGestureRecognizer(pagePanGesture!)
+                if currentIndex == indexPath.item {
+                    page?.pageListView.addGestureRecognizer(pagePanGesture!)
+                }
+            }
         }
 
         if let pageView = page?.pageView, pageView.superview != cell.contentView {
