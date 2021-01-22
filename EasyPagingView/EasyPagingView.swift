@@ -174,6 +174,7 @@ open class EasyPagingView: UIScrollView {
         if let scrollView = subview as? UIScrollView {
             if scrollView !== pageCollectionView {
                 scrollView.isScrollEnabled = false
+                scrollView.addObserver(self, forKeyPath: kContentSize, options: .old, context: ContentViewKVOContext)
             }
         } else {
             subview.addObserver(self, forKeyPath: kFrame, options: .old, context: NormalViewKVOContext)
@@ -431,6 +432,9 @@ open class EasyPagingView: UIScrollView {
                     }
                     lastOffsetY = scrollView.contentOffset.y
                 }
+            } else if keyPath == kContentSize {
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
             }
         } else {
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)

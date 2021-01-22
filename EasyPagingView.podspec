@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'EasyPagingView'
-  s.version          = '1.1.0'
+  s.version          = '1.1.1'
   s.summary          = '功能强大，容易使用的多列表控件'
  
   s.description      = <<-DESC
