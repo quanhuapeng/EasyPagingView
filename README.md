@@ -12,7 +12,7 @@ EasyPagingView 是一个分类列表视图，能轻松集成多个不同的分�
 
 1. 三种模式
 
-<img src="Resources/small.gif" alt="WithoutHeadView" style="zoom:25%;" /><img src="Resources/normal.gif" alt="normal" style="zoom:25%;"/><img src="Resources/long.gif" alt="long" style="zoom:25%;" />
+<img src="Resources/small.gif" alt="WithoutHeadView" width="250" align=center /><img src="Resources/normal.gif" alt="normal" width="250" align=center/><img src="Resources/long.gif" alt="long" width="250" align=center />
 
 三种模式应用于不同场景，模式一没有 headerView；模式二的 headerView 比较简单且高度小于屏幕高度，通常为 UIImageView；模式三的 headerView 比较复杂且高度大于屏幕高度，通常为 UITableView。
 
@@ -93,4 +93,4 @@ protocol EasyPagingViewDelegate: NSObjectProtocol {
 }
 ```
 
-<img src="Resources/long1.gif" alt="long1" style="zoom:25%;" />
+<img src="Resources/long1.gif" alt="long1" width="300" align=center />
