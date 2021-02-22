@@ -6,53 +6,55 @@
 //
 
 import UIKit
-import EasyPagingView
 
 class ViewController: UIViewController {
-    
-    var view0: UIScrollView!
-    let view1 = UIView()
-    var view2: EasyListContentView!
-    let containerView = EasyPagingView()
 
+    let modes: [String] = ["没有headerView", "普通headerView", "长headerView"]
     override func viewDidLoad() {
         super.viewDidLoad()
-        let viewWidth = UIScreen.main.bounds.width
-        let viewHeight = UIScreen.main.bounds.height
-        
-        containerView.frame = self.view.bounds
-        containerView.dataSource = self
-        containerView.dataSource = self
-        containerView.contentInsetAdjustmentBehavior = .never
-//        containerView.pinInsetTop = 64
-        self.view.addSubview(containerView)
-        
-        view0 = UIScrollView(frame: CGRect(origin: .zero, size: CGSize(width: viewWidth, height: 400)))
-        view0.contentSize = CGSize(width: viewWidth, height: viewHeight*1.2)
-        view0.backgroundColor = .purple
-        containerView.pageHeaderView = view0
-        
-        view1.frame = CGRect(origin: .zero, size: CGSize(width: viewWidth, height: 64))
-        view1.backgroundColor = .blue
-        containerView.pagePinView = view1
-        
-        containerView.reloadData()
+        self.title = "EasyPagingView"
+        self.view.backgroundColor = .white
+        let tableView = UITableView(frame: view.bounds, style: .plain)
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.sectionHeaderHeight = 0
+        tableView.sectionFooterHeight = 0
+        view.addSubview(tableView)
 
-        
     }
 }
 
-extension ViewController: EasyPagingViewDataSource {
-    func numberOfLists(in easyPagingView: EasyPagingView) -> Int {
-        return 3
+extension ViewController: UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return modes.count
     }
     
-    func easyPagingView(_ easyContainerScrollView: EasyPagingView, pageForItemAt index: Int) -> EasyPagingViewDelegate {
-        let cell = EasyListContentView(frame: self.view.bounds)
-        if index%2 == 0 {
-            cell.pageListView.backgroundColor = .cyan
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        var cell = tableView.dequeueReusableCell(withIdentifier: "cell")
+        if cell == nil {
+            cell = UITableViewCell(style: .default, reuseIdentifier: "cell")
         }
-        return cell
+        cell?.textLabel?.text = modes[indexPath.row]
+        return cell!
+    }
+}
+
+extension ViewController: UITableViewDelegate {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        
+        switch indexPath.row {
+        case 0:
+            let viewController = WithoutHeaderViewController()
+            self.navigationController?.pushViewController(viewController, animated: true)
+        case 1:
+            let viewController = NormalHeaderViewController()
+            self.navigationController?.pushViewController(viewController, animated: true)
+        case 2:
+            let viewController = LongHeaderViewController()
+            self.navigationController?.pushViewController(viewController, animated: true)
+        default:
+            break
+        }
     }
 }
 

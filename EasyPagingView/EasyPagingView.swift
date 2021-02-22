@@ -7,6 +7,7 @@
 
 import UIKit
 
+let kIsDragging = "kIsDragging"
 let kContentSize = "contentSize"
 let kContentOffset = "contentOffset"
 let kFrame = "frame"
@@ -18,15 +19,47 @@ let PageListViewKVOContext = UnsafeMutableRawPointer(bitPattern: 1)
 let ContentViewKVOContext = UnsafeMutableRawPointer(bitPattern: 2)
 let NormalViewKVOContext = UnsafeMutableRawPointer(bitPattern: 3)
 
-public protocol EasyPagingViewDelegate: NSObjectProtocol {
+public protocol EasyPagingListViewDelegate: NSObjectProtocol {
     var pageView: UIView { get }
     var pageListView: UICollectionView { get }
+    func pageListViewWillAppear()
+    func pageListViewDidAppear()
+    func pageListViewDidDisappear()
+}
+
+public extension EasyPagingListViewDelegate {
+    
+    func pageListViewWillAppear() {
+        
+    }
+    
+    func pageListViewDidAppear() {
+        
+    }
+    
+    func pageListViewDidDisappear() {
+        
+    }
 }
 
 public protocol EasyPagingViewDataSource: NSObjectProtocol {
 
     func numberOfLists(in easyPagingView: EasyPagingView) -> Int
-    func easyPagingView(_ easyPagingView: EasyPagingView, pageForItemAt index: Int) -> EasyPagingViewDelegate
+    func easyPagingView(_ easyPagingView: EasyPagingView, pageForItemAt index: Int) -> EasyPagingListViewDelegate
+}
+
+public protocol EasyPagingViewDelegate: NSObjectProtocol {
+    func segmentViewWillBeginPaningToTop() // segmentView 即将往上拖动
+    func segmentViewDidPaningToTop()       // segmentView 已被拖动到顶部
+    func segmentViewWillBeginPaningToBottom() // segmentView 即将往下拖动
+    func segmentViewDidPaningToBottom() // segmentView 已被拖动到底部
+}
+
+public extension EasyPagingViewDelegate {
+    func segmentViewWillBeginPaningToTop() { }
+    func segmentViewDidPaningToTop() {}
+    func segmentViewWillBeginPaningToBottom() {}
+    func segmentViewDidPaningToBottom() {}
 }
 
 open class EasyPagingView: UIScrollView {
@@ -37,43 +70,44 @@ open class EasyPagingView: UIScrollView {
     }
 
     /// 顶部固定位置
-    public var pinInsetTop: CGFloat = 0
-    /// pinView 是否固定在底部
-    public var isPinOnBottomEnable: Bool = true
+    public var segmentViewInsetTop: CGFloat = 0
+    /// segmentView 是否固定在底部
+    public var isSegmentViewOnBottomEnable: Bool = true
     /// 默认的列表索引
     public var defaultSelectedIndex: Int = 0
 
-    public var pageHeaderView: UIView?
-    public var pagePinView: UIView?
+    public var headerView: UIView?
+    public var segmentView: UIView!
     public var pageCollectionView: UICollectionView!
 
-    var pageDict = [Int : EasyPagingViewDelegate]()
-    var pageCurrentOffsetDict = [Int: CGFloat]()
-    var contentOffsetDict = [Int: CGFloat]()
+    var pageDict = [Int : EasyPagingListViewDelegate]()
+    var pageListViewOffsetDict = [Int: CGFloat]()
+    var easyPagingViewOffsetDict = [Int: CGFloat]()
     var pageCollectionViewOriginY: CGFloat = 0
 
-    /// 当 pinView 未到达最高点时切换列表
-    var isSwitchToNewPageWhenPinViewNotOnTop: Bool = false
+    /// 当 segmentView 未到达最高点时切换列表
+    var isSwitchToNewPageWhenSegmentViewNotOnTop: Bool = false
     var isPaningEndJustNow: Bool = false
-    var switchToNewPageWhenPinViewNotInTopContentOffset: CGFloat = 0
+    var switchToNewPageWhenSegmentViewNotInTopEasyPagingViewOffset: CGFloat = 0
     var lastOffsetY: CGFloat = 0
     var isScrollingDown: Bool = false
     
-    // pinView.origin.y
-    var pinViewOffsetY: CGFloat = 0
+    // segmentView.origin.y
+    var segmentViewOriginY: CGFloat = 0 // segmentView 的 origin.y（相对于 self.contentOffset.y)
+    var segmentViewScrollUpAbleOffsetY: CGFloat = 0 // 当 self.contentOffset.y 大于此值时，segmentView 开始向上滚动
 
     // 拖动
     var pageCollectionViewOffsetY: CGFloat = 0
-    var pinViewDragingBeginOriginY: CGFloat = 0
+    var segmentViewDragingBeginOriginY: CGFloat = 0
 
-    /// 正在拖动 pinView
-    var isPinViewPaning: Bool = false
+    /// 正在拖动 segmentView
+    var isSegmentViewPaning: Bool = false
     var panGesture: UIPanGestureRecognizer?
     var pagePanGesture: UIPanGestureRecognizer?
 
     var currentIndex: Int = 0
     var currentPageListViewOffsetY: CGFloat = 0
-    var currentSubviewOffsetY: CGFloat = 0.0
+    var currentSubviewOriginY: CGFloat = 0.0
 
     var subviewsInLayoutOrder = [UIView]()
 
@@ -90,6 +124,8 @@ open class EasyPagingView: UIScrollView {
             UIScrollView.swizzleIsDragging
         }
     }
+    
+    public weak var easyDelegate: EasyPagingViewDelegate?
 
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -97,10 +133,24 @@ open class EasyPagingView: UIScrollView {
 
     deinit {
         self.removeObserver(self, forKeyPath: kContentOffset, context: ContentViewKVOContext)
-
-        for (_, page) in pageDict {
-            page.pageListView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
-            page.pageListView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
+        
+        if hadHeaderView {
+            for (_, page) in pageDict {
+                page.pageListView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
+                page.pageListView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
+            }
+        }
+        
+        for subview in subviewsInLayoutOrder {
+            if let scrollView = subview as? UIScrollView {
+                if scrollView !== pageCollectionView {
+                    scrollView.isScrollEnabled = false
+                    scrollView.removeObserver(self, forKeyPath: kContentSize)
+                }
+            } else {
+                subview.removeObserver(self, forKeyPath: kFrame)
+                subview.removeObserver(self, forKeyPath: kBounds)
+            }
         }
     }
 
@@ -124,37 +174,47 @@ open class EasyPagingView: UIScrollView {
 
         self.addObserver(self, forKeyPath: kContentOffset, options: .old, context: ContentViewKVOContext)
 
-        if isPinOnBottomEnable {
-            pagePanGesture = UIPanGestureRecognizer(target: self, action: #selector(pinViewPanGesture(_:)))
+        if isSegmentViewOnBottomEnable {
+            pagePanGesture = UIPanGestureRecognizer(target: self, action: #selector(segmentViewPanGesture(_:)))
             pagePanGesture?.delegate = self
         }
     }
 
     public func reloadData() {
+        guard segmentView != nil else { fatalError("segmentView is nil") }
 
-        if let headerView = pageHeaderView {
+        if let headerView = headerView, headerView.superview == nil {
             contentView.addSubview(headerView)
         }
 
-        if let pinView = pagePinView {
-            panGesture = UIPanGestureRecognizer(target: self, action: #selector(pinViewPanGesture(_:)))
-            pinView.addGestureRecognizer(panGesture!)
-            contentView.addSubview(pinView)
+        if let segmentView = segmentView, segmentView.superview == nil {
+            panGesture = UIPanGestureRecognizer(target: self, action: #selector(segmentViewPanGesture(_:)))
+            segmentView.addGestureRecognizer(panGesture!)
+            contentView.addSubview(segmentView)
         }
 
-        contentView.addSubview(pageCollectionView)
-        pageCollectionView.reloadData()
-        if let pinView = pagePinView {
-            contentView.bringSubviewToFront(pinView)
+        if pageCollectionView.superview == nil {
+            let segmentViewHeight = segmentView.frame.height
+            let pageCollectionViewHeight = self.bounds.height - segmentViewHeight - segmentViewInsetTop
+            pageCollectionView.frame = CGRect(x: 0, y: segmentViewHeight + segmentViewInsetTop, width: UIScreen.main.bounds.width, height: pageCollectionViewHeight)
+            contentView.addSubview(pageCollectionView)
         }
+        pageCollectionView.reloadData()
+        
+        contentView.bringSubviewToFront(segmentView)
         
         if !hadHeaderView {
             self.isScrollEnabled = false
         }
     }
     
+    // 外部调用，主动切换到第 index 个列表
+    public func scrollToPageViewAt(_ index: Int) {
+        horizontalScrollDidEnd(at: index)
+    }
+    
     private var hadHeaderView: Bool {
-        return (pageHeaderView != nil) && (pagePinView != nil)
+        return (headerView != nil) && (segmentView != nil)
     }
 
     // MARK: - Adding and removing subviews
@@ -182,14 +242,15 @@ open class EasyPagingView: UIScrollView {
         }
 
         self.setNeedsLayout()
-
     }
 
     func willRemoveSubviewFromContainer(_ subview: UIView) {
-        if let scrollView = subview as? UIScrollView{
-            scrollView.isScrollEnabled = false
-            scrollView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
-            scrollView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
+        if let scrollView = subview as? UIScrollView {
+            if scrollView !== pageCollectionView {
+                scrollView.isScrollEnabled = false
+                scrollView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
+                scrollView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
+            }
         } else {
             subview.removeObserver(self, forKeyPath: kFrame, context: NormalViewKVOContext)
             subview.removeObserver(self, forKeyPath: kBounds, context: NormalViewKVOContext)
@@ -201,56 +262,56 @@ open class EasyPagingView: UIScrollView {
 
     open override func layoutSubviews() {
         super.layoutSubviews()
-        guard !isPinViewPaning else { return }
+        guard !isSegmentViewPaning else { return }
         currentPageListViewOffsetY = 0
-        currentSubviewOffsetY = 0.0
+        currentSubviewOriginY = 0.0
 
         updateContentOffset()
         layoutContentView()
         layoutHeaderView()
-        layoutPinView()
+        layoutSegmentView()
         layoutPageListView()
         updateContentSize()
     }
 
     private func updateContentOffset() {
-        // 维护 PinView 不在顶部时，切换列表时的 contentOffset.y
+        // 维护 segmentView 不在顶部时，切换列表时的 contentOffset.y
         var switchToNewPageAndScrollDownOffsetY: CGFloat = 0
-        if isSwitchToNewPageWhenPinViewNotOnTop {
+        if isSwitchToNewPageWhenSegmentViewNotOnTop {
             if isScrollingDown {
                 // 向下滚动
-                switchToNewPageAndScrollDownOffsetY = self.contentOffset.y - switchToNewPageWhenPinViewNotInTopContentOffset
-                self.contentOffset.y = switchToNewPageWhenPinViewNotInTopContentOffset
+                switchToNewPageAndScrollDownOffsetY = self.contentOffset.y - switchToNewPageWhenSegmentViewNotInTopEasyPagingViewOffset
+                self.contentOffset.y = switchToNewPageWhenSegmentViewNotInTopEasyPagingViewOffset
             }
 
-            if !isPinViewOnTop {
-                currentPageListViewOffsetY = pageCurrentOffsetDict[currentIndex] ?? 0
+            if !isSegmentViewOnTop {
+                currentPageListViewOffsetY = pageListViewOffsetDict[currentIndex] ?? 0
                 currentPageListViewOffsetY += switchToNewPageAndScrollDownOffsetY
-                let contentOffsetY = contentOffsetDict[currentIndex] ?? 0
-                contentOffsetDict[currentIndex] = contentOffsetY + switchToNewPageAndScrollDownOffsetY
+                let contentOffsetY = easyPagingViewOffsetDict[currentIndex] ?? 0
+                easyPagingViewOffsetDict[currentIndex] = contentOffsetY + switchToNewPageAndScrollDownOffsetY
                 if currentPageListViewOffsetY <= 0 {
-                    isSwitchToNewPageWhenPinViewNotOnTop = false
+                    isSwitchToNewPageWhenSegmentViewNotOnTop = false
                     currentPageListViewOffsetY = 0
                 }
             } else {
-                isSwitchToNewPageWhenPinViewNotOnTop = false
-                self.contentOffset.y += (pageCurrentOffsetDict[currentIndex] ?? 0)
+                isSwitchToNewPageWhenSegmentViewNotOnTop = false
+                self.contentOffset.y += (pageListViewOffsetDict[currentIndex] ?? 0)
             }
-            switchToNewPageWhenPinViewNotInTopContentOffset = self.contentOffset.y
+            switchToNewPageWhenSegmentViewNotInTopEasyPagingViewOffset = self.contentOffset.y
         } else {
             if isPaningEndJustNow {
-                currentPageListViewOffsetY = pageCurrentOffsetDict[currentIndex] ?? 0
-                if isPinViewOnTop {
+                currentPageListViewOffsetY = pageListViewOffsetDict[currentIndex] ?? 0
+                if isSegmentViewOnTop {
                     isPaningEndJustNow = false
-                    for (index, pageOffsetY) in pageCurrentOffsetDict {
-                        let contentOffsetY = contentOffsetDict[index] ?? 0
-                        contentOffsetDict[index] = max(contentOffsetY, pinViewOffsetY + pageOffsetY)
+                    for (index, pageOffsetY) in pageListViewOffsetDict {
+                        let contentOffsetY = easyPagingViewOffsetDict[index] ?? 0
+                        easyPagingViewOffsetDict[index] = max(contentOffsetY, segmentViewOriginY + pageOffsetY)
                     }
-                    self.contentOffset.y = max(pinViewOffsetY + currentPageListViewOffsetY, self.contentOffset.y)
+                    self.contentOffset.y = max(segmentViewOriginY + currentPageListViewOffsetY, self.contentOffset.y)
                 }
             }
 
-            contentOffsetDict[currentIndex] = self.contentOffset.y
+            easyPagingViewOffsetDict[currentIndex] = self.contentOffset.y
         }
     }
 
@@ -258,21 +319,21 @@ open class EasyPagingView: UIScrollView {
     private func layoutContentView() {
         contentView.frame = self.bounds
         contentView.bounds = CGRect(origin: self.contentOffset, size: contentView.bounds.size)
-        let pagePinViewHeight: CGFloat = pagePinView?.frame.height ?? 0
-        pageCollectionView.frame.size.height = self.bounds.height - pagePinViewHeight
+        let segmentViewHeight: CGFloat = segmentView?.frame.height ?? 0
+        pageCollectionView.frame.size.height = self.bounds.height - segmentViewHeight - segmentViewInsetTop
     }
 
     private func layoutHeaderView() {
         // 布局 headerView
-        if let headerScrollView = pageHeaderView as? UIScrollView {
+        if let headerScrollView = headerView as? UIScrollView {
             var frame = headerScrollView.frame
             var contentOffset = headerScrollView.contentOffset
 
-            if self.contentOffset.y < currentSubviewOffsetY {
+            if self.contentOffset.y < currentSubviewOriginY {
                 contentOffset.y = 0.0
-                frame.origin.y = currentSubviewOffsetY
+                frame.origin.y = currentSubviewOriginY
             } else {
-                contentOffset.y = self.contentOffset.y - currentSubviewOffsetY
+                contentOffset.y = self.contentOffset.y - currentSubviewOriginY
                 frame.origin.y = self.contentOffset.y
             }
 
@@ -281,94 +342,104 @@ open class EasyPagingView: UIScrollView {
             frame.size.height = min(remainingBoundsHeight, remainingContentHeight)
             frame.size.width = self.contentView.bounds.width
 
-
             headerScrollView.frame = frame
             headerScrollView.contentOffset = contentOffset
 
-            currentSubviewOffsetY += headerScrollView.contentSize.height + headerScrollView.contentInset.top + headerScrollView.contentInset.bottom
+            currentSubviewOriginY += headerScrollView.contentSize.height + headerScrollView.contentInset.top + headerScrollView.contentInset.bottom
 
-        } else if let headerView = pageHeaderView  {
+        } else if let headerView = headerView  {
             var frame = headerView.frame
-            frame.origin.y = currentSubviewOffsetY
+            frame.origin.y = currentSubviewOriginY
             frame.origin.x = 0
             frame.size.width = self.contentView.bounds.width
             headerView.frame = frame
-            currentSubviewOffsetY += frame.size.height
+            currentSubviewOriginY += frame.size.height
         }
     }
 
-    private func layoutPinView() {
-        guard let pinView = pagePinView else { return }
+    private func layoutSegmentView() {
+        guard let segmentView = segmentView else { return }
 
-        // 重新布局 pinView
-        var frame = pinView.frame
+        // 重新布局 segmentView
+        var frame = segmentView.frame
         var originY: CGFloat = 0
-        if (contentOffset.y < currentSubviewOffsetY - (bounds.height - frame.height)) && isPinOnBottomEnable  {
+        segmentViewScrollUpAbleOffsetY = currentSubviewOriginY - (bounds.height - frame.height)
+        if (contentOffset.y < segmentViewScrollUpAbleOffsetY) && isSegmentViewOnBottomEnable  {
             originY = contentOffset.y + bounds.height - frame.height
             panGesture?.isEnabled = true
             pagePanGesture?.isEnabled = true
         } else {
             panGesture?.isEnabled = false
             pagePanGesture?.isEnabled = false
-            originY = max(currentSubviewOffsetY, self.contentOffset.y + pinInsetTop)
+            originY = max(currentSubviewOriginY, self.contentOffset.y + segmentViewInsetTop)
         }
         frame.origin.y = max(originY, self.contentOffset.y)
         frame.origin.x = 0
         frame.size.width = self.contentView.bounds.width
-        pinView.frame = frame
-        self.pinViewOffsetY = originY
-        currentSubviewOffsetY += frame.size.height
+        segmentView.frame = frame
+        self.segmentViewOriginY = originY
+        currentSubviewOriginY += frame.size.height
     }
 
     private func layoutPageListView() {
         guard let pageCollectionView = self.pageCollectionView else { return }
         // 重新布局 page 列表
-        let pagePinViewHeight: CGFloat = pagePinView?.frame.height ?? 0
-        self.pageCollectionViewOriginY = currentSubviewOffsetY - pagePinViewHeight
+        let segmentViewHeight: CGFloat = segmentView?.frame.height ?? 0
+        self.pageCollectionViewOriginY = currentSubviewOriginY - segmentViewHeight - segmentViewInsetTop
         var frame = pageCollectionView.frame
-        frame.origin.y = max(currentSubviewOffsetY, self.contentOffset.y + pagePinViewHeight + pinInsetTop)
+        frame.origin.y = max(currentSubviewOriginY, self.contentOffset.y + segmentViewHeight + segmentViewInsetTop)
         frame.origin.x = 0
         frame.size.width = self.contentView.bounds.width
         pageCollectionView.frame = frame
         pageCollectionViewOffsetY = frame.origin.y
+        var pageContentHeight: CGFloat = 0
         if let pageListView = pageDict[currentIndex]?.pageListView {
-            if isPinViewOnTop {
+            if isSegmentViewOnTop {
                 currentPageListViewOffsetY = self.contentOffset.y - pageCollectionViewOriginY
             }
             pageListView.contentOffset.y = currentPageListViewOffsetY
-            pageCurrentOffsetDict[currentIndex] = currentPageListViewOffsetY
-            currentSubviewOffsetY += (pageListView.contentSize.height + pageListView.contentInset.top + pageListView.contentInset.bottom)
+            pageListViewOffsetDict[currentIndex] = currentPageListViewOffsetY
+            pageContentHeight = pageListView.contentSize.height + pageListView.contentInset.top + pageListView.contentInset.bottom
         }
+        currentSubviewOriginY += max(pageContentHeight, pageCollectionView.bounds.size.height)
     }
 
-    var isPinViewOnTop: Bool {
+    var isSegmentViewOnTop: Bool {
         return self.contentOffset.y > self.pageCollectionViewOriginY
     }
 
     // TODO: 切换 page 的 scrollView contentOffset.y
     func horizontalScrollDidEnd(at index: Int) {
+        
+        guard currentIndex != index else { return }
+        
+        pageListViewDidAppear(at: index)
+        
         guard hadHeaderView else { return }
         
-        if isPinViewPaning {
-            pageCurrentOffsetDict[currentIndex] = pageDict[currentIndex]!.pageListView.contentOffset.y
+        // segmentView 正在被拖动中
+        if isSegmentViewPaning {
+            pageListViewOffsetDict[currentIndex] = pageDict[currentIndex]!.pageListView.contentOffset.y
             pageDict[index]?.pageListView.isScrollEnabled = true
         } else {
-            let currentContentOffsetY = contentOffsetDict[index] ?? 0
-            if self.contentOffset.y > self.pageCollectionViewOriginY {
-                // pinView 已经达到顶部，直接切换 contentOffsetY
+            // 自然滑动
+            let currentContentOffsetY = easyPagingViewOffsetDict[index] ?? 0
+            if isSegmentViewOnTop {
+                // segmentView 已经达到顶部，直接切换 contentOffsetY
                 self.contentOffset.y = max(self.pageCollectionViewOriginY, currentContentOffsetY)
             } else {
     //            self.contentOffset.y = max(contentOffset.y, currentContentOffsetY)
                 // 如果 currentContentOffsetY 不为 nil
                 // 当向上滚动，整个 ScrollView 向上，直到 contentOffset.y 达到 pageCollectionViewOriginY
                 // 当向下滚动，当前page向下，直到 page.contentOffset.y 到达 0.
-                // pinView 未滚动到顶部，需要情况切换 contentOffsetY，在 layoutSubviews() 内切换。
+                // segmentView 未滚动到顶部，需要情况切换 contentOffsetY，在 layoutSubviews() 内切换。
                 if currentIndex != index {
-                    isSwitchToNewPageWhenPinViewNotOnTop = true
-                    switchToNewPageWhenPinViewNotInTopContentOffset = contentOffset.y
+                    isSwitchToNewPageWhenSegmentViewNotOnTop = true
+                    switchToNewPageWhenSegmentViewNotInTopEasyPagingViewOffset = contentOffset.y
                 }
             }
         }
+        
         if index != currentIndex, let gesture = pagePanGesture {
             pageDict[currentIndex]?.pageListView.removeGestureRecognizer(gesture)
             pageDict[index]?.pageListView.addGestureRecognizer(gesture)
@@ -380,7 +451,7 @@ open class EasyPagingView: UIScrollView {
     private func updateContentSize() {
         let minimumContentHeight = self.bounds.size.height - (self.contentInset.top + self.contentInset.bottom)
         let initialContentOffset = self.contentOffset
-        self.contentSize = CGSize(width: self.bounds.width, height: max(currentSubviewOffsetY, minimumContentHeight))
+        self.contentSize = CGSize(width: self.bounds.width, height: max(currentSubviewOriginY, minimumContentHeight))
 
         if initialContentOffset != self.contentOffset {
             self.setNeedsLayout()
@@ -397,6 +468,7 @@ open class EasyPagingView: UIScrollView {
                     let oldContentSize = change?[.oldKey] as! CGSize
                     let newContentSize = scrollView.contentSize
                     if oldContentSize != newContentSize && scrollView === pageDict[currentIndex]?.pageListView {
+                        
                         self.setNeedsLayout()
                         self.layoutIfNeeded()
                     }
@@ -404,11 +476,11 @@ open class EasyPagingView: UIScrollView {
             } else if keyPath == kContentOffset {
                 guard let scrollView = pageDict[currentIndex]?.pageListView else { return }
 
-                if isPinViewPaning {
+                if isSegmentViewPaning {
                     let offsetY = scrollView.contentOffset.y
                     pageDict[currentIndex]?.pageListView.bounces = (offsetY > 200)
                 }
-                pageCurrentOffsetDict[currentIndex] = scrollView.contentOffset.y
+                pageListViewOffsetDict[currentIndex] = scrollView.contentOffset.y
             }
         } else if context == NormalViewKVOContext {
             if keyPath == kFrame || keyPath == kBounds {
@@ -433,8 +505,12 @@ open class EasyPagingView: UIScrollView {
                     lastOffsetY = scrollView.contentOffset.y
                 }
             } else if keyPath == kContentSize {
-                self.setNeedsLayout()
-                self.layoutIfNeeded()
+                let oldContentSize = change?[.oldKey] as! CGSize
+                let newContentSize = (object as! UIScrollView).contentSize
+                if oldContentSize != newContentSize {
+                    self.setNeedsLayout()
+                    self.layoutIfNeeded()
+                }
             }
         } else {
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
@@ -452,9 +528,6 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
     public func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return dataSource?.numberOfLists(in: self) ?? 0
     }
-    
-    public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
-    }
 
     public func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: cellIdentifier, for: indexPath)
@@ -470,9 +543,6 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
                 page?.pageListView.addObserver(self, forKeyPath: kContentSize, options: .old, context: PageListViewKVOContext)
                 page?.pageListView.addObserver(self, forKeyPath: kContentOffset, options: .old, context: PageListViewKVOContext)
 
-                if currentIndex == indexPath.item {
-                    page?.pageListView.addGestureRecognizer(pagePanGesture!)
-                }
             }
         }
 
@@ -484,11 +554,16 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
         }
         return cell
     }
+    
+    public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        pageListViewWillAppear(at: indexPath.item)
+    }
 
     public func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         if let pagePanGesture = pagePanGesture {
             pageDict[indexPath.item]?.pageListView.removeGestureRecognizer(pagePanGesture)
         }
+        pageListViewDidDisappear(at: indexPath.item)
     }
 
     public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
@@ -499,21 +574,32 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
 
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         if self === scrollView {
-            if isPinViewOnTop {
+            if isSegmentViewOnTop {
                 pageDict[currentIndex]?.pageListView.isCurrentDragging = true
             } else {
                 pageDict[currentIndex]?.pageListView.isCurrentDragging = nil
             }
         }
     }
+    
+    public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === pageCollectionView else { return }
+        if scrollView.isDragging || scrollView.isDecelerating {
+            return
+        }
+        
+        let index = Int(scrollView.contentOffset.x/scrollView.bounds.size.width)
+        horizontalScrollDidEnd(at: index)
+    }
 
     public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if scrollView === self {
-            if isPinViewOnTop {
-                pageDict[currentIndex]?.pageListView.isCurrentDragging = false
-            } else {
-                pageDict[currentIndex]?.pageListView.isCurrentDragging = nil
-            }
+//            if isSegmentViewOnTop {
+//                pageDict[currentIndex]?.pageListView.isCurrentDragging = nil
+//            } else {
+//                pageDict[currentIndex]?.pageListView.isCurrentDragging = nil
+//            }
+            pageDict[currentIndex]?.pageListView.isCurrentDragging = nil
         } else {
             if !decelerate {
                 let index = Int(scrollView.contentOffset.x/scrollView.bounds.size.width)
@@ -521,23 +607,77 @@ extension EasyPagingView: UICollectionViewDataSource, UICollectionViewDelegateFl
             }
         }
     }
+    
+    func pageListViewWillAppear(at index: Int) {
+        guard let dataSource = dataSource else { return }
+        let count = dataSource.numberOfLists(in: self)
+        if count <= 0 || index >= count {
+            return
+        }
+        pageDict[index]?.pageListViewWillAppear()
+    }
+    
+    func pageListViewDidAppear(at index: Int) {
+        guard let dataSource = dataSource else { return }
+        let count = dataSource.numberOfLists(in: self)
+        if count <= 0 || index >= count {
+            return
+        }
+        // 生命周期
+        pageDict[index]?.pageListViewDidAppear()
+    }
+
+    func pageListViewDidDisappear(at index: Int) {
+        guard let dataSource = dataSource else { return }
+        let count = dataSource.numberOfLists(in: self)
+        if count <= 0 || index >= count {
+            return
+        }
+        pageDict[index]?.pageListViewDidDisappear()
+    }
 }
 
 extension EasyPagingView {
-    @objc func pinViewPanGesture(_ gesture: UIPanGestureRecognizer) {
+    
+    public func segmentViewScrollToTop() {
+        guard let segmentView = self.segmentView else { return }
+        guard !isSegmentViewPaning && self.contentOffset.y < self.segmentViewScrollUpAbleOffsetY else { return }
+        isSegmentViewPaning = true
+        self.isScrollEnabled = false
+        pageDict[currentIndex]?.pageListView.isScrollEnabled = true
+        easyDelegate?.segmentViewWillBeginPaningToTop()
+        self.pageCollectionView.frame.origin.y = (segmentView.frame.origin.y + segmentView.frame.height)
+        
+        UIView.animate(withDuration: 0.4, delay: 0, options: .curveEaseInOut) {
+            let segmentViewDragingEndOriginY = self.segmentViewOriginY - self.bounds.height + self.segmentView!.frame.height + self.segmentViewInsetTop
+            self.segmentView?.frame.origin.y = segmentViewDragingEndOriginY
+            self.pageCollectionView.frame.origin.y = (segmentView.frame.origin.y + segmentView.frame.height)
+        } completion: { (success) in
+            if success {
+                self.pageDict[self.currentIndex]?.pageListView.addGestureRecognizer(self.pagePanGesture!)
+                self.easyDelegate?.segmentViewDidPaningToTop()
+            }
+        }
+    }
+    
+    @objc func segmentViewPanGesture(_ gesture: UIPanGestureRecognizer) {
+        guard let segmentView = self.segmentView else { return }
 
         if gesture.state == .began {
-            if !isPinViewPaning {
+            if !isSegmentViewPaning {
                 self.isScrollEnabled = false
-                isPinViewPaning = true
+                isSegmentViewPaning = true
                 pageDict[currentIndex]?.pageListView.isScrollEnabled = true
+                easyDelegate?.segmentViewWillBeginPaningToTop()
+            } else {
+                easyDelegate?.segmentViewWillBeginPaningToBottom()
             }
-            pinViewDragingBeginOriginY = pagePinView!.frame.origin.y
+            segmentViewDragingBeginOriginY = segmentView.frame.origin.y
 
         } else if gesture.state == .changed {
             let gestureOffsetY = gesture.translation(in: contentView).y
-            pagePinView?.frame.origin.y = max(pinInsetTop, pinViewDragingBeginOriginY + gestureOffsetY)
-            pageCollectionView.frame.origin.y = (pagePinView!.frame.origin.y + pagePinView!.frame.height)
+            segmentView.frame.origin.y = max(segmentViewInsetTop, segmentViewDragingBeginOriginY + gestureOffsetY)
+            pageCollectionView.frame.origin.y = (segmentView.frame.origin.y + segmentView.frame.height)
         } else if gesture.state == .ended {
             let velocityY = gesture.velocity(in: contentView).y
             let gestureOffsetY = gesture.translation(in: contentView).y
@@ -546,7 +686,7 @@ extension EasyPagingView {
     }
 
     func didEndScrolling(velocityY: CGFloat, gestureOffsetY: CGFloat) {
-        let panHeight = (bounds.height - pagePinView!.frame.height) / 2
+        let panHeight = (bounds.height - segmentView!.frame.height) / 2
         let shouldScrollToBottom: Bool
         let isPanMovingDown = gestureOffsetY < 0 // 是否向下拖动
         
@@ -560,14 +700,14 @@ extension EasyPagingView {
             shouldScrollToBottom = reachMaxPanHeight || reachMaxVelocity
         }
 
-        let pinViewDragingEndOriginY = !shouldScrollToBottom ? pinViewOffsetY - bounds.height + pagePinView!.frame.height : pinViewOffsetY
+        let segmentViewDragingEndOriginY = !shouldScrollToBottom ? segmentViewOriginY - bounds.height + segmentView!.frame.height + segmentViewInsetTop : segmentViewOriginY
         UIView.animate(withDuration: 0.4, delay: 0, options: .curveEaseInOut) {
-            self.pagePinView?.frame.origin.y = pinViewDragingEndOriginY
-            self.pageCollectionView.frame.origin.y = (self.pagePinView!.frame.origin.y + self.pagePinView!.frame.height)
+            self.segmentView?.frame.origin.y = segmentViewDragingEndOriginY
+            self.pageCollectionView.frame.origin.y = (self.segmentView!.frame.origin.y + self.segmentView!.frame.height)
         } completion: { (success) in
             if success {
-                if pinViewDragingEndOriginY == self.pinViewOffsetY {
-                    self.isPinViewPaning = false
+                if segmentViewDragingEndOriginY == self.segmentViewOriginY {
+                    self.isSegmentViewPaning = false
                     self.pageCollectionView.frame.origin.y = self.pageCollectionViewOffsetY
                     self.pageDict[self.currentIndex]?.pageListView.isScrollEnabled = false
                     self.isScrollEnabled = true
@@ -576,6 +716,11 @@ extension EasyPagingView {
                         page.pageListView.isScrollEnabled = false
                     }
                     self.isPaningEndJustNow = true
+                    self.pageDict[self.currentIndex]?.pageListView.removeGestureRecognizer(self.pagePanGesture!)
+                    self.easyDelegate?.segmentViewDidPaningToBottom()
+                } else {
+                    self.pageDict[self.currentIndex]?.pageListView.addGestureRecognizer(self.pagePanGesture!)
+                    self.easyDelegate?.segmentViewDidPaningToTop()
                 }
             }
         }
@@ -591,7 +736,7 @@ extension EasyPagingView: UIGestureRecognizerDelegate {
             let pageScrollViewOffsetY = pageDict[currentIndex]?.pageListView.contentOffset.y ?? 0
             let isScrollingDown = velocityY > 0
             let isReachOnTop = pageScrollViewOffsetY <= 0
-            let isPagePanGestureEnable = isScrollingDown && isReachOnTop && isPinViewPaning
+            let isPagePanGestureEnable = isScrollingDown && isReachOnTop && isSegmentViewPaning
             return isPagePanGestureEnable
         }
         return true

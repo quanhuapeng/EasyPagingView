@@ -18,19 +18,20 @@ class EasyListContentView: UIView {
         super.init(frame: frame)
         
         let flowLayout = UICollectionViewFlowLayout()
+        flowLayout.minimumLineSpacing = 0
         flowLayout.itemSize = CGSize(width: frame.width, height: 100)
         collectionView = UICollectionView(frame: CGRect(origin: .zero, size: frame.size), collectionViewLayout: flowLayout)
         collectionView.dataSource = self
-//        collectionView.isScrollEnabled = false
         collectionView.backgroundColor = .white
         collectionView.register(CollectionViewCell.self, forCellWithReuseIdentifier: "cell")
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.contentInset.bottom = 0
         
         addSubview(collectionView)
         
         collectionView.mj_header = MJRefreshNormalHeader(refreshingBlock: { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(300)) {
-                self?.totalCount = 20
+                self?.totalCount = 30
                 self?.collectionView.reloadData()
                 self?.collectionView.mj_header?.endRefreshing()
             }
@@ -64,7 +65,7 @@ extension EasyListContentView: UICollectionViewDataSource {
     }
 }
 
-extension EasyListContentView: EasyPagingViewDelegate {
+extension EasyListContentView: EasyPagingListViewDelegate {
     var pageView: UIView {
         return self
     }
@@ -88,22 +89,4 @@ class CollectionViewCell: UICollectionViewCell {
     }
 }
 
-extension EasyListContentView: UITableViewDataSource {
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return totalCount
-    }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        
-        var cell = tableView.dequeueReusableCell(withIdentifier: "cell")
-        if cell == nil {
-            cell = UITableViewCell(style: .default, reuseIdentifier: "cell")
-        }
-        cell?.textLabel?.text = "\(indexPath.row)"
-        cell?.backgroundColor = .clear
-        return cell!
-    }
-    
-    
-}
+

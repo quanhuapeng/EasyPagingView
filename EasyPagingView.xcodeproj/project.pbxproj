@@ -22,6 +22,10 @@
 		8959D79C25AAC79800BE7B7A /* EasyListContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8959D79B25AAC79800BE7B7A /* EasyListContentView.swift */; };
 		8959D7B625AAC9DA00BE7B7A /* EasyPagingView.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8959D76925AAC62300BE7B7A /* EasyPagingView.framework */; };
 		8959D7B725AAC9DA00BE7B7A /* EasyPagingView.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 8959D76925AAC62300BE7B7A /* EasyPagingView.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		89EE097F25DCE21F00E42B85 /* SegmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89EE097E25DCE21F00E42B85 /* SegmentView.swift */; };
+		89EE098225DD12FB00E42B85 /* WithoutHeaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89EE098125DD12FB00E42B85 /* WithoutHeaderViewController.swift */; };
+		89EE098525DD141800E42B85 /* LongHeaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89EE098425DD141800E42B85 /* LongHeaderViewController.swift */; };
+		89EE098825DD146800E42B85 /* NormalHeaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89EE098725DD146800E42B85 /* NormalHeaderViewController.swift */; };
 		D4CEE70B2D2464F945461342 /* Pods_Demo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5656E195342C68E201C9F77D /* Pods_Demo.framework */; };
 /* End PBXBuildFile section */
 
@@ -71,6 +75,10 @@
 		8959D79325AAC77D00BE7B7A /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8959D79525AAC77D00BE7B7A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		8959D79B25AAC79800BE7B7A /* EasyListContentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EasyListContentView.swift; sourceTree = "<group>"; };
+		89EE097E25DCE21F00E42B85 /* SegmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentView.swift; sourceTree = "<group>"; };
+		89EE098125DD12FB00E42B85 /* WithoutHeaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WithoutHeaderViewController.swift; sourceTree = "<group>"; };
+		89EE098425DD141800E42B85 /* LongHeaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHeaderViewController.swift; sourceTree = "<group>"; };
+		89EE098725DD146800E42B85 /* NormalHeaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NormalHeaderViewController.swift; sourceTree = "<group>"; };
 		B6188819082CA92E463B8CB4 /* Pods-EasyPagingView.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-EasyPagingView.release.xcconfig"; path = "Target Support Files/Pods-EasyPagingView/Pods-EasyPagingView.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -150,6 +158,10 @@
 				8959D79025AAC77D00BE7B7A /* Assets.xcassets */,
 				8959D79225AAC77D00BE7B7A /* LaunchScreen.storyboard */,
 				8959D79525AAC77D00BE7B7A /* Info.plist */,
+				89EE097E25DCE21F00E42B85 /* SegmentView.swift */,
+				89EE098125DD12FB00E42B85 /* WithoutHeaderViewController.swift */,
+				89EE098425DD141800E42B85 /* LongHeaderViewController.swift */,
+				89EE098725DD146800E42B85 /* NormalHeaderViewController.swift */,
 			);
 			path = Demo;
 			sourceTree = "<group>";
@@ -354,9 +366,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				89EE098825DD146800E42B85 /* NormalHeaderViewController.swift in Sources */,
 				8959D79C25AAC79800BE7B7A /* EasyListContentView.swift in Sources */,
 				8959D78C25AAC77B00BE7B7A /* ViewController.swift in Sources */,
+				89EE098525DD141800E42B85 /* LongHeaderViewController.swift in Sources */,
 				8959D78825AAC77B00BE7B7A /* AppDelegate.swift in Sources */,
+				89EE097F25DCE21F00E42B85 /* SegmentView.swift in Sources */,
+				89EE098225DD12FB00E42B85 /* WithoutHeaderViewController.swift in Sources */,
 				8959D78A25AAC77B00BE7B7A /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

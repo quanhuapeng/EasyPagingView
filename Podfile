@@ -7,6 +7,7 @@ target 'Demo' do
 
   # Pods for Demo
   pod 'MJRefresh'
+  pod 'SnapKit'
 end
 
 target 'EasyPagingView' do

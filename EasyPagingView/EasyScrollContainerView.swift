@@ -10,10 +10,19 @@
 
 import UIKit
 
-class EasyScrollContainerView: UIScrollView {
+public protocol EasyScrollListViewDataSource: NSObjectProtocol {
+    var listView: UIScrollView { get }
+}
+
+open class EasyScrollContainerView: UIScrollView {
 
     public var contentView: UIView!
     var subviewsInLayoutOrder = [UIView]()
+    public var lineSpacing: CGFloat = 0 {
+        didSet {
+            self.setNeedsLayout()
+        }
+    }
     
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -21,7 +30,7 @@ class EasyScrollContainerView: UIScrollView {
         commonInitForEasyContainerScrollview()
     }
     
-    required init?(coder: NSCoder) {
+    required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
@@ -29,8 +38,7 @@ class EasyScrollContainerView: UIScrollView {
         
         contentView = EasyContainerScrollViewContentView()
         self.addSubview(contentView)
-        
-        
+        self.delegate = self
     }
     
     func didAddSubviewToContainer(_ subview: UIView) {
@@ -44,8 +52,16 @@ class EasyScrollContainerView: UIScrollView {
         }
         
         subviewsInLayoutOrder.append(subview)
+        subviewsInLayoutOrder.sort { (lhs, rhs) -> Bool in
+            lhs.tag < rhs.tag
+        }
         
-        if let scrollView = subview as? UIScrollView{
+        if let listView = subview as? EasyScrollListViewDataSource {
+            UIScrollView.swizzleIsDragging
+            listView.listView.isScrollEnabled = false
+            listView.listView.addObserver(self, forKeyPath: kContentSize, options: .old, context: PageListViewKVOContext)
+            listView.listView.addObserver(self, forKeyPath: kContentOffset, options: .old, context: PageListViewKVOContext)
+        } else if let scrollView = subview as? UIScrollView{
             scrollView.isScrollEnabled = false
             scrollView.addObserver(self, forKeyPath: kContentSize, options: .old, context: PageListViewKVOContext)
             scrollView.addObserver(self, forKeyPath: kContentOffset, options: .old, context: PageListViewKVOContext)
@@ -59,7 +75,11 @@ class EasyScrollContainerView: UIScrollView {
     }
     
     func willRemoveSubviewFromContainer(_ subview: UIView) {
-        if let scrollView = subview as? UIScrollView{
+        if let listView = subview as? EasyScrollListViewDataSource {
+            listView.listView.isScrollEnabled = false
+            listView.listView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
+            listView.listView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
+        } else if let scrollView = subview as? UIScrollView{
             scrollView.isScrollEnabled = false
             scrollView.removeObserver(self, forKeyPath: kContentSize, context: PageListViewKVOContext)
             scrollView.removeObserver(self, forKeyPath: kContentOffset, context: PageListViewKVOContext)
@@ -72,7 +92,7 @@ class EasyScrollContainerView: UIScrollView {
         self.setNeedsLayout()
     }
     
-    override func layoutSubviews() {
+    open override func layoutSubviews() {
         super.layoutSubviews()
         contentView.frame = self.bounds
         contentView.bounds = CGRect(origin: self.contentOffset, size: contentView.bounds.size)
@@ -82,7 +102,29 @@ class EasyScrollContainerView: UIScrollView {
         for index in 0..<subviewsInLayoutOrder.count {
             let subview = subviewsInLayoutOrder[index]
             
-            if let scrollView = subview as? UIScrollView {
+            if let listViewDataSource = subview as? EasyScrollListViewDataSource {
+                var frame = subview.frame
+                frame.origin.x = 0
+                frame.size.height = UIScreen.main.bounds.height
+                frame.size.width = self.contentView.bounds.width
+                
+                var listContentOffset = listViewDataSource.listView.contentOffset
+                if self.contentOffset.y < yOffsetOfCurrentSubview {
+                    listContentOffset.y = 0.0
+                    frame.origin.y = yOffsetOfCurrentSubview
+                } else {
+                    listContentOffset.y = self.contentOffset.y - yOffsetOfCurrentSubview
+                    frame.origin.y = self.contentOffset.y
+                }
+                subview.frame = frame
+                listViewDataSource.listView.frame = subview.bounds
+                listViewDataSource.listView.contentOffset = listContentOffset
+                
+                let scrollViewContentHeight = listViewDataSource.listView.contentSize.height + listViewDataSource.listView.contentInset.top + listViewDataSource.listView.contentInset.bottom
+                let listFrameHeight = frame.height
+                yOffsetOfCurrentSubview += max(scrollViewContentHeight, listFrameHeight)
+                
+            } else if let scrollView = subview as? UIScrollView {
                 var frame = scrollView.frame
                 var contentOffset = scrollView.contentOffset
                 
@@ -109,6 +151,10 @@ class EasyScrollContainerView: UIScrollView {
                 frame.size.width = self.contentView.bounds.width
                 subview.frame = frame
                 yOffsetOfCurrentSubview += frame.size.height
+            }
+            
+            if (index < (self.subviewsInLayoutOrder.count - 1)) {
+                yOffsetOfCurrentSubview += self.lineSpacing;
             }
         }
         
@@ -149,6 +195,20 @@ class EasyScrollContainerView: UIScrollView {
             }
         } else {
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+        }
+    }
+}
+
+extension EasyScrollContainerView: UIScrollViewDelegate {
+    public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        if let listView = subviewsInLayoutOrder.last as? EasyScrollListViewDataSource {
+            listView.listView.isCurrentDragging = true
+        }
+    }
+
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if let listView = subviewsInLayoutOrder.last as? EasyScrollListViewDataSource {
+            listView.listView.isCurrentDragging = false
         }
     }
 }
