@@ -94,3 +94,18 @@ protocol EasyPagingViewDelegate: NSObjectProtocol {
 ```
 
 <img src="Resources/long1.gif" alt="long1" width="300" align=center />
+
+# 安装
+
+* 手动安装
+
+将 `EasyPagingView.swift`、`EasyScrollContainerView.swift`、`UIScrollView+Swizzle.swift` 拷贝到工程中。
+
+* CocoaPods
+
+```
+target '<工程名>' do
+    pod 'EasyPagingView'
+end
+```
+
